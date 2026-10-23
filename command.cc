@@ -93,6 +93,7 @@ void parse(std::vector<Token> &tokens)
             currentCommand._background = 1;
         }
     }  
+     currentCommand.insertSimpleCommand(currentSimpleCommand);
     currentCommand.execute();
     /*
       Implement this function 
@@ -128,13 +129,15 @@ Command::Command()
 {
     _numberOfAvailableSimpleCommands = 1;
     _simpleCommands = (SimpleCommand **)
-        malloc(_numberOfSimpleCommands * sizeof(SimpleCommand *));
+        malloc(_numberOfAvailableSimpleCommands * sizeof(SimpleCommand *)); 
+        /*or we could initialize _numberOfSimpleCommands to a value we want to save space for  */
 
     _numberOfSimpleCommands = 0;
     _outFile = 0;
     _inputFile = 0;
     _errFile = 0;
     _background = 0;
+    _append = 0; //initialize _append to 0 to indicate that we are not appending by default
 }
 
 void Command::insertSimpleCommand(SimpleCommand *simpleCommand)
@@ -183,6 +186,7 @@ void Command::clear()
     _inputFile = 0;
     _errFile = 0;
     _background = 0;
+    _append = 0; //reset _append to 0 when clearing the command 
 }
 
 void Command::print()
@@ -214,21 +218,98 @@ void Command::print()
 void Command::execute()
 {
     print();
-    /*
-        Write your code here
-    */
+
+    if(_numberOfSimpleCommands == 0) /*check en fy command*/
+    {
+        clear();
+        return;
+    }
+
+    pid_t pid =fork();
+    
+    if(pid == 0)
+    {
+        if(_outFile != NULL)
+        {
+            if(_append)
+            {
+                int fd=open(_outFile,O_WRONLY | O_CREAT | O_APPEND, 0644);
+                if(fd == -1)
+                {
+                    perror("open failed");
+                    _exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+            else
+            {
+            int fd=open(_outFile,O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if(fd == -1)
+            {
+                perror("open failed");
+                _exit(EXIT_FAILURE);
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+            }
+        }
+
+        if(_inputFile != NULL)
+        {
+            int fd=open(_inputFile,O_RDONLY);
+            if(fd == -1)
+            {
+                perror("open failed");
+                _exit(EXIT_FAILURE);
+            }
+            dup2(fd, STDIN_FILENO);
+            close(fd);
+        }
+
+        if(_errFile != NULL)
+        {
+            int fd=open(_errFile,O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if(fd == -1)
+            {
+                perror("open failed");
+                _exit(EXIT_FAILURE);
+            }
+            dup2(fd, STDERR_FILENO);
+            close(fd);
+        }
+
+     execvp(_simpleCommands[0]->_arguments[0], _simpleCommands[0]->_arguments);
+     perror("execvp failed"); 
+     /*user typed command not found ,zy ma fel shell byktb command not found*/
+     /*perror dy bttb3 elstring ely hktbo + el linux error*/
+     _exit(EXIT_FAILURE); /*h2fl elchild process*/
+    }
+    else if (pid > 0)
+    {
+        // Parent process
+        if (!_background)
+        {
+            waitpid(pid, nullptr, 0); // Wait for the child process to finish if not in background
+        }
+    }
+    else
+    {
+        perror("fork failed");
+    }   
 
     clear();
-    prompt();
+    
 }
 
 void Command::prompt()
 {
-    printf("myshell>");
-    fflush(stdout);
+   
     std::string input;
     while (true)
     {
+         printf("myshell>");
+        fflush(stdout);
         std::getline(std::cin, input); 
         std::vector<Token> tokens = tokenize(input);
         parse(tokens);
