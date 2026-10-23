@@ -79,8 +79,9 @@ void parse(std::vector<Token> &tokens)
             i++;
             if(i < tokens.size())
             {
-                currentCommand._errFile = strdup(tokens[i].value.c_str());
+                currentCommand._outFile= strdup(tokens[i].value.c_str());
                 currentCommand._out_error = 1;
+                currentCommand._append = 1; 
             }
         }
         else if(token.type == TOKEN_PIPE)
@@ -138,6 +139,7 @@ Command::Command()
     _errFile = 0;
     _background = 0;
     _append = 0; //initialize _append to 0 to indicate that we are not appending by default
+    _out_error = 0; //initialize _out_error to 0 to indicate that we are not redirecting error by default
 }
 
 void Command::insertSimpleCommand(SimpleCommand *simpleCommand)
@@ -224,7 +226,9 @@ void Command::execute()
         clear();
         return;
     }
-
+    
+   for(int i =0; i<_numberOfSimpleCommands; i++) 
+   {
     pid_t pid =fork();
     
     if(pid == 0)
@@ -277,6 +281,10 @@ void Command::execute()
             }
             dup2(fd, STDERR_FILENO);
             close(fd);
+        }
+        if(_out_error == 1)
+        {
+            dup2(STDOUT_FILENO, STDERR_FILENO);
         }
 
      execvp(_simpleCommands[0]->_arguments[0], _simpleCommands[0]->_arguments);
