@@ -33,7 +33,66 @@ void parse(std::vector<Token> &tokens)
 {
     Command currentCommand;
     SimpleCommand *currentSimpleCommand = new SimpleCommand();
-
+    for(int i = 0; i<tokens.size(); i++)
+    {
+        Token token = tokens[i];
+        if(token.type == TOKEN_COMMAND || token.type == TOKEN_ARGUMENT) 
+        {
+            currentSimpleCommand->insertArgument(strdup(token.value.c_str()));
+        }
+        else if(token.type == TOKEN_REDIRECT)
+        {
+            i++;
+            if(i < tokens.size())
+            {
+                currentCommand._outFile = strdup(tokens[i].value.c_str());
+            }
+        }
+        else if(token.type == TOKEN_APPEND)
+        {
+            i++;
+            if(i < tokens.size())
+            {
+                currentCommand._outFile = strdup(tokens[i].value.c_str());
+                currentCommand._append = 1;
+            }
+        }
+        else if(token.type == TOKEN_INPUT)
+        {
+            i++;
+            if(i < tokens.size())
+            {
+                currentCommand._inputFile = strdup(tokens[i].value.c_str());
+            }
+        }
+        else if(token.type == TOKEN_ERROR)
+        {
+            i++;
+            if(i < tokens.size())
+            {
+                currentCommand._errFile = strdup(tokens[i].value.c_str());
+                currentCommand._out_error = 0;
+            }
+        }
+        else if(token.type == TOKEN_REDIRECT_AND_ERROR)
+        {
+            i++;
+            if(i < tokens.size())
+            {
+                currentCommand._errFile = strdup(tokens[i].value.c_str());
+                currentCommand._out_error = 1;
+            }
+        }
+        else if(token.type == TOKEN_PIPE)
+        {
+            currentCommand.insertSimpleCommand(currentSimpleCommand);
+            currentSimpleCommand = new SimpleCommand();
+        }
+        else if(token.type == TOKEN_BACKGROUND)
+        {
+            currentCommand._background = 1;
+        }
+    }  
     currentCommand.execute();
     /*
       Implement this function 
