@@ -221,93 +221,178 @@ void Command::execute()
 {
     print();
 
-    if(_numberOfSimpleCommands == 0) /*check en fy command*/
+    if (_numberOfSimpleCommands == 0)
     {
         clear();
         return;
     }
-    
-   for(int i =0; i<_numberOfSimpleCommands; i++) 
-   {
-    pid_t pid =fork();
-    
-    if(pid == 0)
+
+    int inputFd = STDIN_FILENO;
+    std::vector<pid_t> childPids;
+
+    for (int i = 0; i < _numberOfSimpleCommands; i++)
     {
-        if(_outFile != NULL)
+        int fd[2];
+
+        // Create a pipe if there is another command
+        if (i < _numberOfSimpleCommands - 1)
         {
-            if(_append)
+            if (pipe(fd) == -1)
             {
-                int fd=open(_outFile,O_WRONLY | O_CREAT | O_APPEND, 0644);
-                if(fd == -1)
+                perror("pipe failed");
+
+                if (inputFd != STDIN_FILENO)
+                    close(inputFd);
+
+                for (pid_t child : childPids)
+                    waitpid(child, NULL, 0);
+
+                clear();
+                return;
+            }
+        }
+
+        pid_t pid = fork();
+
+        if (pid == 0)
+        {
+            // Read from the previous pipe
+            if (inputFd != STDIN_FILENO)
+            {
+                dup2(inputFd, STDIN_FILENO);
+                close(inputFd);
+            }
+
+            // Write to the next pipe
+            if (i < _numberOfSimpleCommands - 1)
+            {
+                dup2(fd[1], STDOUT_FILENO);
+                close(fd[0]);
+                close(fd[1]);
+            }
+
+            // Input redirection <
+            // Only for the first command
+            if (i == 0 && _inputFile != NULL)
+            {
+                int file = open(_inputFile, O_RDONLY);
+
+                if (file == -1)
                 {
-                    perror("open failed");
+                    perror("input open failed");
                     _exit(EXIT_FAILURE);
                 }
-                dup2(fd, STDOUT_FILENO);
-                close(fd);
+
+                dup2(file, STDIN_FILENO);
+                close(file);
+            }
+
+            // Output redirection > and >>
+            // Only for the last command
+            if (i == _numberOfSimpleCommands - 1 && _outFile != NULL)
+            {
+                int flags = O_WRONLY | O_CREAT;
+
+                if (_append == 1)
+                    flags = flags | O_APPEND;
+                else
+                    flags = flags | O_TRUNC;
+
+                int file = open(_outFile, flags, 0644);
+
+                if (file == -1)
+                {
+                    perror("output open failed");
+                    _exit(EXIT_FAILURE);
+                }
+
+                dup2(file, STDOUT_FILENO);
+                close(file);
+            }
+
+            // Error redirection 2>
+            // Only for the last command
+            if (i == _numberOfSimpleCommands - 1 && _errFile != NULL)
+            {
+                int file = open(_errFile,
+                                O_WRONLY | O_CREAT | O_TRUNC,
+                                0644);
+
+                if (file == -1)
+                {
+                    perror("error open failed");
+                    _exit(EXIT_FAILURE);
+                }
+
+                dup2(file, STDERR_FILENO);
+                close(file);
+            }
+
+            // Redirect output and error together >>&
+            if (i == _numberOfSimpleCommands - 1 && _out_error == 1)
+            {
+                dup2(STDOUT_FILENO, STDERR_FILENO);
+            }
+
+            // Execute the current command
+            execvp(_simpleCommands[i]->_arguments[0],
+                   _simpleCommands[i]->_arguments);
+
+            perror("execvp failed!");
+            _exit(EXIT_FAILURE);
+        }
+        else if (pid > 0)
+        {
+            childPids.push_back(pid);
+
+            // Close the previous pipe input
+            if (inputFd != STDIN_FILENO)
+            {
+                close(inputFd);
+            }
+
+            // Keep the read end for the next command
+            if (i < _numberOfSimpleCommands - 1)
+            {
+                close(fd[1]);
+                inputFd = fd[0];
             }
             else
             {
-            int fd=open(_outFile,O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            if(fd == -1)
-            {
-                perror("open failed");
-                _exit(EXIT_FAILURE);
-            }
-            dup2(fd, STDOUT_FILENO);
-            close(fd);
+                inputFd = STDIN_FILENO;
             }
         }
+        else
+        {
+            perror("fork failed");
 
-        if(_inputFile != NULL)
-        {
-            int fd=open(_inputFile,O_RDONLY);
-            if(fd == -1)
-            {
-                perror("open failed");
-                _exit(EXIT_FAILURE);
-            }
-            dup2(fd, STDIN_FILENO);
-            close(fd);
-        }
+            if (inputFd != STDIN_FILENO)
+                close(inputFd);
 
-        if(_errFile != NULL)
-        {
-            int fd=open(_errFile,O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            if(fd == -1)
+            if (i < _numberOfSimpleCommands - 1)
             {
-                perror("open failed");
-                _exit(EXIT_FAILURE);
+                close(fd[0]);
+                close(fd[1]);
             }
-            dup2(fd, STDERR_FILENO);
-            close(fd);
-        }
-        if(_out_error == 1)
-        {
-            dup2(STDOUT_FILENO, STDERR_FILENO);
-        }
 
-     execvp(_simpleCommands[0]->_arguments[0], _simpleCommands[0]->_arguments);
-     perror("execvp failed"); 
-     /*user typed command not found ,zy ma fel shell byktb command not found*/
-     /*perror dy bttb3 elstring ely hktbo + el linux error*/
-     _exit(EXIT_FAILURE); /*h2fl elchild process*/
-    }
-    else if (pid > 0)
-    {
-        // Parent process
-        if (!_background)
-        {
-            waitpid(pid, nullptr, 0); // Wait for the child process to finish if not in background
+            for (pid_t child : childPids)
+                waitpid(child, NULL, 0);
+
+            clear();
+            return;
         }
     }
-    else
+
+    // Wait only for this command's children
+    if (!_background)
     {
-        perror("fork failed");
-    }   
+        for (pid_t child : childPids)
+        {
+            waitpid(child, NULL, 0);
+        }
+    }
 
     clear();
-    
 }
 
 void Command::prompt()
