@@ -1,2 +1,0 @@
-Hello
-ls: cannot access '/wrongfolder': No such file or directory
