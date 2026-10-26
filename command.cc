@@ -13,7 +13,7 @@
 #include "command.h"
 #include "tokenizer.h"
 
-// SIGCHLD handler: reap finished children and write a line in shell.log
+
 void childHandler(int sig)
 {
     int saved = errno;
@@ -34,7 +34,7 @@ void childHandler(int sig)
     errno = saved;
 }
 
-// Print an error, free everything built so far and give up on this line
+
 static void parseError(const char *msg, Command &cmd, SimpleCommand *simple)
 {
     fprintf(stderr, "myshell: %s\n", msg);
@@ -49,7 +49,6 @@ static bool isWord(Token &t)
 
 void parse(std::vector<Token> &tokens)
 {
-    // only the EOF token -> empty line
     if (tokens.size() <= 1)
         return;
 
@@ -65,7 +64,6 @@ void parse(std::vector<Token> &tokens)
             std::string value = token.value;
             char q = value[0];
 
-            // the tokenizer splits on spaces, so join the pieces of a quoted string
             if (q == '"' || q == '\'')
             {
                 bool closed = value.size() > 1 && value[value.size() - 1] == q;
@@ -85,7 +83,7 @@ void parse(std::vector<Token> &tokens)
                  token.type == TOKEN_INPUT || token.type == TOKEN_ERROR ||
                  token.type == TOKEN_REDIRECT_AND_ERROR)
         {
-            // the next token must be a file name
+        
             if (i + 1 >= tokens.size() || !isWord(tokens[i + 1]))
             {
                 parseError("missing file name after redirection", currentCommand, currentSimpleCommand);
@@ -272,7 +270,7 @@ void Command::execute()
         return;
     }
 
-    // built-in commands run inside the shell itself (no fork)
+  
     if (_numberOfSimpleCommands == 1)
     {
         char **args = _simpleCommands[0]->_arguments;
@@ -319,7 +317,7 @@ void Command::execute()
 
         if (pid == 0)
         {
-            // ctrl-c must kill the child, only the shell ignores it
+       
             signal(SIGINT, SIG_DFL);
 
             if (inputFd != STDIN_FILENO)
@@ -335,7 +333,7 @@ void Command::execute()
                 close(fd[1]);
             }
 
-            // input redirection (first command only)
+       
             if (i == 0 && _inputFile != NULL)
             {
                 int file = open(_inputFile, O_RDONLY);
@@ -348,7 +346,6 @@ void Command::execute()
                 close(file);
             }
 
-            // output redirection (last command only)
             if (last && _outFile != NULL)
             {
                 int flags = O_WRONLY | O_CREAT | (_append ? O_APPEND : O_TRUNC);
@@ -362,7 +359,7 @@ void Command::execute()
                 close(file);
             }
 
-            // error redirection (last command only)
+            
             if (last && _errFile != NULL)
             {
                 int file = open(_errFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -375,7 +372,7 @@ void Command::execute()
                 close(file);
             }
 
-            // >>& : stderr goes where stdout goes
+            
             if (last && _out_error == 1)
             {
                 dup2(STDOUT_FILENO, STDERR_FILENO);
@@ -414,12 +411,11 @@ void Command::execute()
     if (inputFd != STDIN_FILENO && childPids.size() < (size_t)_numberOfSimpleCommands)
         close(inputFd);
 
-    // wait only for this command's children, unless it runs in background
     if (!_background)
     {
         for (size_t k = 0; k < childPids.size(); k++)
         {
-            // wait without reaping, so the SIGCHLD handler logs and reaps it
+          
             waitid(P_PID, childPids[k], NULL, WEXITED | WNOWAIT);
         }
     }
@@ -451,10 +447,10 @@ SimpleCommand *Command::_currentSimpleCommand;
 
 int main()
 {
-    // the shell ignores ctrl-c
+
     signal(SIGINT, SIG_IGN);
 
-    // log every finished child
+
     struct sigaction sa;
     sa.sa_handler = childHandler;
     sigemptyset(&sa.sa_mask);
